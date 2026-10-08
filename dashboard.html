@@ -536,12 +536,12 @@ async function loadNews(force=false) {
     const { entries } = await (await fetch('/api/news')).json();
     if (!entries || !entries.length) { c.innerHTML='<div class="card" style="color:var(--muted)">Nessuna notizia.</div>'; return; }
     c.innerHTML = entries.map(n => `
-      <a class="news-item" href="${n.link}" target="_blank" rel="noopener">
-        <div class="news-flag">${n.flag}</div>
+      <a class="news-item" href="${safeUrl(n.link)}" target="_blank" rel="noopener">
+        <div class="news-flag">${esc(n.flag)}</div>
         <div class="news-content">
-          <div class="news-source">${n.source}</div>
-          <div class="news-title">${n.title}</div>
-          ${n.published ? `<div class="news-date">${n.published}</div>` : ''}
+          <div class="news-source">${esc(n.source)}</div>
+          <div class="news-title">${esc(n.title)}</div>
+          ${n.published ? `<div class="news-date">${esc(n.published)}</div>` : ''}
         </div>
         <div class="news-arrow">↗</div>
       </a>`).join('');
@@ -638,6 +638,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+/* Escape testo esterno (RSS, API) prima di inserirlo come HTML */
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? esc(u) : '#'; }
+
 async function doConvert() {
   const amount = parseFloat(document.getElementById('conv-amount').value);
   const dir    = document.getElementById('conv-dir').value;
@@ -646,7 +652,7 @@ async function doConvert() {
   box.style.display='flex'; box.textContent='…'; box.className='result-box';
   try {
     const d = await (await fetch(`/api/convert?amount=${amount}&direction=${dir}`)).json();
-    if (d.error) { showResult(box,'❌ '+d.error,'error'); return; }
+    if (d.error) { showResult(box,'❌ '+esc(d.error),'error'); return; }
     const inp = dir==='eur_to_sats' ? `€ ${fmt(amount,2)}` : `${fmt(amount,0)} sats`;
     const out = dir==='eur_to_sats' ? `${fmt(d.output,0)} SATS` : `€ ${fmt(d.output,2)}`;
     box.innerHTML=`<div><div class="result-main">${out}</div><div class="result-sub">${inp} al prezzo corrente</div></div>`;
@@ -660,8 +666,8 @@ async function doTxCheck() {
   if (!txid) { showResult(box,'❌ Inserisci un TXID.','error'); return; }
   box.style.display='flex'; box.textContent='…'; box.className='result-box';
   try {
-    const d = await (await fetch(`/api/tx/${txid}`)).json();
-    if (d.error) { showResult(box,'❌ '+d.error,'error'); return; }
+    const d = await (await fetch(`/api/tx/${encodeURIComponent(txid)}`)).json();
+    if (d.error) { showResult(box,'❌ '+esc(d.error),'error'); return; }
     const stato = d.confirmed
       ? `✅ Confermata nel blocco <strong>#${fmt(d.block_height)}</strong>`
       : '⏳ In attesa — in Mempool';
@@ -678,17 +684,17 @@ async function doBlockFind() {
   box.style.display='flex'; box.innerHTML='…'; box.className='result-box';
   try {
     const d = await (await fetch(`/api/block/${height}`)).json();
-    if (d.error) { showResult(box,'❌ '+d.error,'error'); return; }
+    if (d.error) { showResult(box,'❌ '+esc(d.error),'error'); return; }
     box.style.flexDirection='column';
     box.innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
         <div><span style="color:var(--muted);font-size:.75rem">ALTEZZA</span><br><strong>${fmt(d.height)}</strong></div>
-        <div><span style="color:var(--muted);font-size:.75rem">DATA</span><br><strong>${d.timestamp}</strong></div>
-        <div><span style="color:var(--muted);font-size:.75rem">MINER</span><br><strong>${d.miner}</strong></div>
+        <div><span style="color:var(--muted);font-size:.75rem">DATA</span><br><strong>${esc(d.timestamp)}</strong></div>
+        <div><span style="color:var(--muted);font-size:.75rem">MINER</span><br><strong>${esc(d.miner)}</strong></div>
         <div><span style="color:var(--muted);font-size:.75rem">TX</span><br><strong>${fmt(d.tx_count)}</strong></div>
         <div><span style="color:var(--muted);font-size:.75rem">REWARD</span><br><strong>${d.reward_btc} BTC</strong></div>
         <div><span style="color:var(--muted);font-size:.75rem">LINK</span><br>
-          <a href="https://mempool.space/block/${d.block_id}" target="_blank" style="color:var(--orange)">mempool.space ↗</a></div>
+          <a href="https://mempool.space/block/${esc(d.block_id)}" target="_blank" style="color:var(--orange)">mempool.space ↗</a></div>
       </div>`;
     box.className='result-box success';
   } catch(e) { showResult(box,'❌ Errore di rete.','error'); }
@@ -709,7 +715,7 @@ async function scanWhale() {
   try {
     const d = await (await fetch('/api/whale')).json();
     if (d.error) {
-      box.innerHTML = `<div class="whale-empty">❌ ${d.error}</div>`;
+      box.innerHTML = `<div class="whale-empty">❌ ${esc(d.error)}</div>`;
       return;
     }
     const header = `<p style="color:var(--muted);font-size:.8rem;margin-bottom:12px;">Blocco <strong style="color:var(--text)">#${d.block_height.toLocaleString('it-IT')}</strong> — soglia ≥ ${d.threshold_btc} BTC</p>`;
@@ -722,9 +728,9 @@ async function scanWhale() {
         <div>
           <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px;">#${i+1} · ${w.outputs} output</div>
           <div class="whale-btc">${w.total_btc.toLocaleString('it-IT', {minimumFractionDigits:2})} BTC</div>
-          <a class="whale-link" href="https://mempool.space/tx/${w.txid}" target="_blank">🔗 ${w.txid.slice(0,20)}…</a>
+          <a class="whale-link" href="https://mempool.space/tx/${esc(w.txid)}" target="_blank">🔗 ${esc(w.txid.slice(0,20))}…</a>
         </div>
-        <a href="https://mempool.space/tx/${w.txid}" target="_blank" style="color:var(--muted);font-size:1.2rem;text-decoration:none;">↗</a>
+        <a href="https://mempool.space/tx/${esc(w.txid)}" target="_blank" style="color:var(--muted);font-size:1.2rem;text-decoration:none;">↗</a>
       </div>`).join('');
     box.innerHTML = header + `<div class="whale-list">${items}</div>`;
   } catch(e) {

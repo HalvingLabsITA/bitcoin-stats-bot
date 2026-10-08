@@ -10,7 +10,9 @@ Allineato con il bot Telegram v4.0:
 import asyncio
 import html
 import logging
+import math
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Optional
@@ -40,6 +42,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
+TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
 cache:    dict = {"data": None,    "last_update": 0}
 news_cache: dict = {"entries": None, "last_update": 0}
 fg_cache:   dict = {"data": None,    "last_update": 0}
@@ -321,14 +325,17 @@ async def api_whale():
             }
     except Exception as e:
         logger.error(f"Errore whale: {e}")
-        return {"error": str(e)}
+        return {"error": "Dati whale non disponibili"}
 
 
 @app.get("/api/tx/{txid}")
 async def api_tx(txid: str):
+    txid = txid.strip()
+    if not TXID_RE.match(txid):
+        return {"error": "TXID non valido"}
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            r = await client.get(f"https://mempool.space/api/tx/{txid.strip()}")
+            r = await client.get(f"https://mempool.space/api/tx/{txid}")
             if r.status_code != 200:
                 return {"error": "TXID non trovato"}
             tx = r.json()
@@ -340,11 +347,14 @@ async def api_tx(txid: str):
                 "txid":         txid,
             }
         except Exception as e:
-            return {"error": str(e)}
+            logger.error(f"Errore tx: {e}")
+            return {"error": "TXID non trovato"}
 
 
 @app.get("/api/block/{height}")
 async def api_block(height: int):
+    if height < 0:
+        return {"error": "Blocco non trovato"}
     async with httpx.AsyncClient(timeout=20.0) as client:
         try:
             r = await client.get(f"https://mempool.space/api/v1/blocks/{height}")
@@ -367,11 +377,14 @@ async def api_block(height: int):
                 "weight":     b.get("weight", 0),
             }
         except Exception as e:
-            return {"error": str(e)}
+            logger.error(f"Errore block: {e}")
+            return {"error": "Blocco non trovato"}
 
 
 @app.get("/api/convert")
 async def api_convert(amount: float, direction: str = "eur_to_sats"):
+    if not math.isfinite(amount) or amount < 0:
+        return {"error": "Importo non valido"}
     d = await get_bitcoin_data()
     if not d:
         return {"error": "Prezzo non disponibile"}
@@ -433,4 +446,4 @@ async def websocket_endpoint(ws: WebSocket):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("server:app", host="127.0.0.1", port=8000)

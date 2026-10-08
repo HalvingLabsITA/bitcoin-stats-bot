@@ -2,6 +2,8 @@
 Bitcoin Stats Bot — Halving Labs v4.0
 Canale: @hlbitcoinstats
 """
+import math
+import re
 import logging
 import httpx
 import time
@@ -1008,6 +1010,12 @@ async def miner_custom_text(u: Update, c: ContextTypes.DEFAULT_TYPE):
     name = (u.message.text or "").strip()
     if not name:
         return
+    if len(name) > 40:
+        await u.message.reply_text("❌ Nome troppo lungo (max 40 caratteri). Riprova da /filtraminer.")
+        raise ApplicationHandlerStop
+    if len(c.user_data.get("mf_pools", [])) >= 100:
+        await u.message.reply_text("❌ Troppe pool in lista. Riprova da /filtraminer.")
+        raise ApplicationHandlerStop
     pools    = c.user_data.get("mf_pools", [])
     selected = c.user_data.setdefault("mf_selected", set())
     if name not in pools:
@@ -1269,7 +1277,7 @@ async def alert_dir(u: Update, c: ContextTypes.DEFAULT_TYPE):
 async def alert_price(u: Update, c: ContextTypes.DEFAULT_TYPE):
     try:
         soglia = float(u.message.text.replace(".", "").replace(",", "."))
-        if soglia <= 0:
+        if not math.isfinite(soglia) or soglia <= 0 or soglia > 100_000_000:
             raise ValueError
     except ValueError:
         await u.message.reply_text("❌ Inserisci un numero valido, es: `95000`", parse_mode="Markdown")
@@ -1330,6 +1338,8 @@ async def conv_tipo(u: Update, c: ContextTypes.DEFAULT_TYPE):
 async def conv_exec(u: Update, c: ContextTypes.DEFAULT_TYPE):
     try:
         val = float(u.message.text.replace(",", "."))
+        if not math.isfinite(val) or val < 0:
+            raise ValueError
         d   = await get_bitcoin_data()
         if c.user_data["tipo"] == "EUR ➔ SATS":
             res = (val / d["price_eur"]) * 100_000_000
@@ -1348,10 +1358,15 @@ async def conv_exec(u: Update, c: ContextTypes.DEFAULT_TYPE):
 async def tx_start(u: Update, c: ContextTypes.DEFAULT_TYPE):
     await u.message.reply_text("📑 Invia il TXID da verificare:")
     return TX_STATUS_STATE
+TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 async def tx_exec(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    txid = (u.message.text or "").strip()
+    if not TXID_RE.match(txid):
+        await u.message.reply_text("❌ TXID non valido (servono 64 caratteri esadecimali).")
+        return ConversationHandler.END
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            r      = await client.get(f"https://mempool.space/api/tx/{u.message.text.strip()}")
+            r      = await client.get(f"https://mempool.space/api/tx/{txid}")
             tx     = r.json()
             status = "✅ Confermata" if tx["status"]["confirmed"] else "⏳ In Mempool"
             blocco = (
