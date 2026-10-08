@@ -1,0 +1,21 @@
+# Segreti
+.env
+.env.*
+!.env.example
+
+# Dati runtime (log, alert utenti, stato)
+data/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Backup e file di sistema/editor
+*.bak
+.DS_Store
+.claude/
+.vscode/
+.idea/

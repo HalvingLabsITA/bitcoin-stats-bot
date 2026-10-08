@@ -1,0 +1,43 @@
+# ── Halving Labs — Docker Compose per VPS ──────────────────────────────────────
+# Due servizi indipendenti:
+#   bot       → bot Telegram (bot.py)
+#   dashboard → interfaccia web FastAPI (server.py) su porta 8000
+#
+# Avvio:   docker compose up -d
+# Stop:    docker compose down
+# Log bot: docker compose logs -f bot
+# Log web: docker compose logs -f dashboard
+
+services:
+
+  # ── Bot Telegram ─────────────────────────────────────────────────────────────
+  bot:
+    build: .
+    container_name: halving-bot
+    restart: unless-stopped
+    command: python bot.py
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+    volumes:
+      # Persistenza: last_block.txt e alerts.json sopravvivono ai riavvii
+      - ./data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Dashboard Web ─────────────────────────────────────────────────────────────
+  dashboard:
+    build: .
+    container_name: halving-dashboard
+    restart: "no"
+    command: uvicorn server:app --host 127.0.0.1 --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
